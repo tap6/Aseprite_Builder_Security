@@ -1,4 +1,6 @@
-此仓库来源于https://github.com/a1393323447/aseprite-builder 修改。由ChatGPT4o和ChatGPTo3-mini-high检测是否存在不良步骤（并没有不良步骤），同时将a1393323447/aseprite-builder中使用的https://github.com/a1393323447/fetch-release 直接集成入 a1393323447/aseprite-builder ，避免从其他仓库调用。
+此仓库来源于https://github.com/a1393323447/aseprite-builder 修改。
+
+由ChatGPT4o和ChatGPTo3-mini-high检测是否存在不良步骤（并没有不良步骤），同时将a1393323447/aseprite-builder中使用的https://github.com/a1393323447/fetch-release 直接集成入 a1393323447/aseprite-builder ，避免从其他仓库调用。
 
 
 
