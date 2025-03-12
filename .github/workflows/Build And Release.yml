@@ -1,116 +1,95 @@
-name: Build Aseprite
+name: Build and Release Aseprite
 
 on:
   workflow_dispatch:
-    inputs:
-      version:
-        description: 'Aseprite Version'
-        required: true
-        default: 'v1.3.13'  # 默认使用 v1.3.13
-        type: string
+
+env:
+  BUILD_TYPE: Release
 
 jobs:
-  build:
-    name: Build Aseprite (${{ matrix.os }})
+  build-aseprite:
+    name: Build Aseprite
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-
-    env:
-      SKIA_VERSION: "m102-861e4743af"  # 固定 Skia 版本，用户可手动修改
-      SKIA_BASE_URL: "https://github.com/aseprite/skia/releases/download"
-
+        matrix:
+          os: [windows-latest, ubuntu-latest, macos-latest]
+        fail-fast: false
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install dependencies (Linux)
+      - name: Install Dependencies (Linux)
         if: runner.os == 'Linux'
         run: |
-          sudo apt update
-          sudo apt install -y cmake ninja-build g++ clang libc++-dev libc++abi-dev libx11-dev libxcursor-dev libxi-dev libgl1-mesa-dev libfontconfig1-dev curl git
-          sudo ln -sf /usr/bin/clang++ /usr/bin/c++
+          sudo apt-get update -qq
+          sudo apt-get install -y \
+            libpixman-1-dev libfreetype6-dev libharfbuzz-dev zlib1g-dev \
+            libx11-dev libxcursor-dev libxi-dev libgl1-mesa-dev libfontconfig1-dev
 
-      - name: Install dependencies (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          brew update
-          brew install cmake ninja llvm fontconfig curl git
-          brew link --overwrite cmake
+      - uses: actions/checkout@v4
 
-      - name: Install dependencies (Windows)
-        if: runner.os == 'Windows'
+      - name: Clone Aseprite
         run: |
-          choco install -y cmake ninja git curl
+          git clone --recursive -j8 https://github.com/aseprite/aseprite.git --branch v1.3.13
 
-      - name: Download Skia (Linux)
-        if: runner.os == 'Linux'
+      - name: Install Skia
+        working-directory: aseprite
         run: |
-          SKIA_URL="${{ env.SKIA_BASE_URL }}/${{ env.SKIA_VERSION }}/Skia-Linux-Release-x64-libc++.zip"
-          echo "Downloading Skia from: $SKIA_URL"
-          curl -L -o skia.zip "$SKIA_URL"
-          unzip skia.zip -d skia
-          find skia -name "libskia.a" || echo "Error: libskia.a not found!"
-          if [ ! -f "skia/libskia.a" ] && [ ! -f "skia/out/Release/libskia.a" ]; then exit 1; fi
-
-      - name: Download Skia (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          ARCH=$(uname -m)
-          if [ "$ARCH" = "arm64" ]; then
-            SKIA_FILE="Skia-macOS-Release-arm64.zip"
+          if [[ "${{ runner.os }}" == "Windows" ]] ; then
+            choco install wget -y --no-progress
+            wget https://github.com/aseprite/skia/releases/download/m102-861e4743af/Skia-Windows-Release-x64.zip
+            unzip Skia-Windows-Release-x64.zip -d skia
+          elif [[ "${{ runner.os }}" == "macOS" ]] ; then
+            wget https://github.com/aseprite/skia/releases/download/m102-861e4743af/Skia-macOS-Release-arm64.zip
+            unzip Skia-macOS-Release-arm64.zip -d skia
           else
-            SKIA_FILE="Skia-macOS-Release-x64.zip"
+            wget https://github.com/aseprite/skia/releases/download/m102-861e4743af/Skia-Linux-Release-x64-libc++.zip
+            unzip Skia-Linux-Release-x64-libc++.zip -d skia
           fi
-          SKIA_URL="${{ env.SKIA_BASE_URL }}/${{ env.SKIA_VERSION }}/$SKIA_FILE"
-          echo "Downloading Skia from: $SKIA_URL"
-          curl -L -o skia.zip "$SKIA_URL"
-          unzip skia.zip -d skia
-          find skia -name "libskia.a" || echo "Error: libskia.a not found!"
-          if [ ! -f "skia/libskia.a" ] && [ ! -f "skia/out/Release/libskia.a" ]; then exit 1; fi
 
-      - name: Download Skia (Windows)
+      - name: Install Ninja
+        uses: aseprite/get-ninja@main
+
+      - uses: ilammy/msvc-dev-cmd@v1
         if: runner.os == 'Windows'
-        run: |
-          $skia_url = "${{ env.SKIA_BASE_URL }}/${{ env.SKIA_VERSION }}/Skia-Windows-Release-x64.zip"
-          Write-Output "Downloading Skia from: $skia_url"
-          Invoke-WebRequest -Uri $skia_url -OutFile skia.zip
-          powershell -command "Expand-Archive -Path skia.zip -DestinationPath skia"
-          Get-ChildItem -Path skia -Recurse -Filter "libskia.a"
-          if (-not (Test-Path "skia/libskia.a") -and -not (Test-Path "skia/out/Release/libskia.a")) { Write-Error "Error: libskia.a not found!"; exit 1 }
 
-      - name: Clone Aseprite (with submodules)
+      - name: Generating Makefiles
+        shell: bash
+        working-directory: aseprite
         run: |
-          git clone --recursive --depth=1 --branch ${{ github.event.inputs.version || 'v1.3.13' }} https://github.com/aseprite/aseprite.git aseprite
-          if [ ! -f "aseprite/CMakeLists.txt" ]; then echo "Error: CMakeLists.txt not found!"; exit 1; fi
+          export enable_ccache=off
+          export laf_backend=skia
+          export enable_scripting=on
 
-      - name: Build Aseprite
+          if [[ "${{ runner.os }}" == "macOS" ]] ; then
+            export skia_arch=arm64
+          else
+            export skia_arch=x64
+          fi
+
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=10.9 \
+            -DENABLE_TESTS=OFF \
+            -ENABLE_SCRIPTING=$enable_scripting \
+            -ENABLE_CCACHE=$enable_ccache \
+            -DLAF_BACKEND=$laf_backend \
+            -DSKIA_DIR=$(realpath skia) \
+            -DSKIA_LIBRARY_DIR=$(realpath skia/out/Release-$skia_arch)
+
+      - name: Compiling
+        shell: bash
+        working-directory: aseprite
         run: |
-          cd aseprite
-          mkdir build
-          cd build
-          SKIA_LIB_PATH="../../skia/libskia.a"
-          if [ ! -f "$SKIA_LIB_PATH" ]; then SKIA_LIB_PATH="../../skia/out/Release/libskia.a"; fi
-          cmake -G Ninja -DCMAKE_BUILD_TYPE=Release \
-                -DLAF_BACKEND=skia \
-                -DSKIA_DIR=../../skia \
-                -DSKIA_LIBRARY_DIR=$(dirname "$SKIA_LIB_PATH") \
-                -DSKIA_LIBRARY=$SKIA_LIB_PATH ..
-          ninja
+          cd build && ninja
+
+      - name: Clean Up Build Folder
+        working-directory: aseprite/build/bin
+        run: find . -mindepth 1 ! \( -name 'aseprite' -o -name 'aseprite.exe' -o -name 'data' -prune \) -exec rm -rf {} +
+
+      - name: Make Portable Zip
+        working-directory: aseprite/build/bin
+        run: echo '# This file is here so Aseprite behaves as a portable program' > aseprite.ini
 
       - name: Archive Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: aseprite-${{ matrix.os }}
-          path: aseprite/build/bin/aseprite*
-
-      - name: Create Release
-        if: github.ref == 'refs/heads/main'
-        uses: softprops/action-gh-release@v2
-        with:
-          files: aseprite/build/bin/aseprite*
-          tag_name: aseprite-${{ github.event.inputs.version }}
-          name: "Aseprite ${{ github.event.inputs.version }} Release"
-          body: "Compiled version of Aseprite ${{ github.event.inputs.version }} for Windows, Linux, and macOS"
+          path: aseprite/build/bin/*
