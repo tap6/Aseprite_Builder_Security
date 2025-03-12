@@ -1,4 +1,4 @@
-name: Build and release Aseprite
+name: Build and Release Aseprite
 
 on:
   push:
