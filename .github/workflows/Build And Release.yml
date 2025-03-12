@@ -14,6 +14,7 @@ jobs:
     name: Build Aseprite (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false  # 让失败的任务不会影响其他任务
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
 
@@ -30,23 +31,26 @@ jobs:
       - name: Install dependencies (macOS)
         if: runner.os == 'macOS'
         run: |
+          brew update
           brew install cmake ninja llvm fontconfig curl git
+          brew link --overwrite cmake
 
       - name: Install dependencies (Windows)
         if: runner.os == 'Windows'
         run: |
           choco install -y cmake ninja git curl
 
-      - name: Clone Skia
+      - name: Download Aseprite Skia (Linux/macOS)
+        if: runner.os != 'Windows'
         run: |
-          git clone --depth=1 https://github.com/aseprite/skia.git skia
-          cd skia
-          python ./tools/git-sync-deps
-          mkdir build
-          cd build
-          cmake -G Ninja -DCMAKE_BUILD_TYPE=Release ..
-          ninja
-          cd ../../
+          curl -L -o skia.zip https://github.com/aseprite/skia/releases/download/m97-2/skia-m97-2-linux.zip
+          unzip skia.zip -d skia
+
+      - name: Download Aseprite Skia (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          curl -L -o skia.zip https://github.com/aseprite/skia/releases/download/m97-2/skia-m97-2-win.zip
+          powershell -command "Expand-Archive -Path skia.zip -DestinationPath skia"
 
       - name: Clone Aseprite
         run: |
@@ -57,7 +61,11 @@ jobs:
           cd aseprite
           mkdir build
           cd build
-          cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DLAF_BACKEND=skia -DSKIA_DIR=../../skia -DSKIA_LIBRARY_DIR=../../skia/out/Release -DSKIA_LIBRARY=../../skia/out/Release/skia.lib ..
+          cmake -G Ninja -DCMAKE_BUILD_TYPE=Release \
+                -DLAF_BACKEND=skia \
+                -DSKIA_DIR=../../skia \
+                -DSKIA_LIBRARY_DIR=../../skia/out/Release \
+                -DSKIA_LIBRARY=../../skia/out/Release/skia.lib ..
           ninja
 
       - name: Archive Artifacts
