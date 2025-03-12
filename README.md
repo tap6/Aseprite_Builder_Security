@@ -29,11 +29,16 @@ Windows：未找到 libcrypto-1_1-x64.dll
 
 <img src="https://github.com/user-attachments/assets/0c9e5801-abf2-491b-acaa-aba2c958c493" alt="image" style="zoom: 67%;" />
 
-在 [firedaemon](https://kb.firedaemon.com/support/solutions/articles/4000121705#Download-OpenSSL) 下载openssl-1.1.1w.zip
+在 [firedaemon](https://kb.firedaemon.com/support/solutions/articles/4000121705#Download-OpenSSL) 下载[openssl-1.1.1w.zip](https://download.firedaemon.com/FireDaemon-OpenSSL/openssl-1.1.1w.zip)
 
 <img src="https://github.com/user-attachments/assets/9ce7f97b-0bff-47f7-8f0c-580b2682edae" alt="image" style="zoom: 25%;" />
 
-或您可以使用直链，[openssl-1.1.1w.zip](https://download.firedaemon.com/FireDaemon-OpenSSL/openssl-1.1.1w.zip)
+解压openssl-1.1.1w.zip x64/bin/libcrypto-1_1-x64.dll到与aseprite.exe的同一目录下
 
-解压x64/bin/libcrypto-1_1-x64.dll到openssl-1.1.1w.zip与aseprite.exe
-现在 aseprite 应该可以正常工作了
+![image](https://github.com/user-attachments/assets/f8983630-6fcc-4990-b5dc-e0aecc7ca6c8)
+
+现在 aseprite 应该可以正常工作了。
+
+
+
+
