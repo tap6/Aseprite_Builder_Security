@@ -6,7 +6,7 @@ on:
       version:
         description: 'Aseprite Version'
         required: true
-        default: 'v1.3.13'
+        default: 'v1.3.13'  # 默认使用 v1.3.13
         type: string
 
 jobs:
@@ -26,27 +26,27 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt update
-          sudo apt install -y cmake ninja-build g++ clang libc++-dev libc++abi-dev libx11-dev libxcursor-dev libxi-dev libgl1-mesa-dev libfontconfig1-dev curl git
+          sudo apt install -y cmake ninja-build g++ clang libc++-dev libc++abi-dev libx11-dev libxcursor-dev libxi-dev libgl1-mesa-dev libfontconfig1-dev curl git jq
           sudo ln -sf /usr/bin/clang++ /usr/bin/c++
 
       - name: Install dependencies (macOS)
         if: runner.os == 'macOS'
         run: |
           brew update
-          brew install cmake ninja llvm fontconfig curl git
+          brew install cmake ninja llvm fontconfig curl git jq
           brew link --overwrite cmake
 
       - name: Install dependencies (Windows)
         if: runner.os == 'Windows'
         run: |
-          choco install -y cmake ninja git curl
+          choco install -y cmake ninja git curl jq
 
       - name: Get Latest Skia URL (Linux)
         if: runner.os == 'Linux'
         run: |
           SKIA_URL=$(curl -s https://api.github.com/repos/aseprite/skia/releases/latest | \
-                     grep "browser_download_url.*Skia-Linux-Release-x64-libc++.zip" | \
-                     cut -d '"' -f 4)
+                     jq -r '.assets[] | select(.name | contains("Skia-Linux-Release-x64-libc++")) | .browser_download_url')
+          if [ -z "$SKIA_URL" ]; then echo "Error: Skia URL not found!"; exit 1; fi
           echo "Skia Download URL: $SKIA_URL"
           curl -L -o skia.zip "$SKIA_URL"
           unzip skia.zip -d skia
@@ -55,8 +55,8 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           SKIA_URL=$(curl -s https://api.github.com/repos/aseprite/skia/releases/latest | \
-                     grep "browser_download_url.*Skia-macOS-Release-x64.zip" | \
-                     cut -d '"' -f 4)
+                     jq -r '.assets[] | select(.name | contains("Skia-macOS-Release-x64")) | .browser_download_url')
+          if [ -z "$SKIA_URL" ]; then echo "Error: Skia URL not found!"; exit 1; fi
           echo "Skia Download URL: $SKIA_URL"
           curl -L -o skia.zip "$SKIA_URL"
           unzip skia.zip -d skia
@@ -64,16 +64,17 @@ jobs:
       - name: Get Latest Skia URL (Windows)
         if: runner.os == 'Windows'
         run: |
-          $skia_url = (Invoke-RestMethod -Uri "https://api.github.com/repos/aseprite/skia/releases/latest" | `
-                      Select-String -Pattern 'browser_download_url.*Skia-Windows-Release-x64.zip' | `
-                      ForEach-Object { $_ -match '"(https://github[^"]+)"'; $matches[1] })
+          $skia_url = (Invoke-RestMethod -Uri "https://api.github.com/repos/aseprite/skia/releases/latest").assets |
+                      Where-Object { $_.name -like "Skia-Windows-Release-x64*" } |
+                      Select-Object -ExpandProperty browser_download_url
+          if (-not $skia_url) { Write-Error "Error: Skia URL not found!"; exit 1 }
           Write-Output "Skia Download URL: $skia_url"
           Invoke-WebRequest -Uri $skia_url -OutFile skia.zip
           powershell -command "Expand-Archive -Path skia.zip -DestinationPath skia"
 
-      - name: Clone Aseprite
+      - name: Clone Aseprite (with submodules)
         run: |
-          git clone --depth=1 --branch ${{ github.event.inputs.version || 'v1.3.5' }} https://github.com/aseprite/aseprite.git aseprite
+          git clone --recursive --depth=1 --branch ${{ github.event.inputs.version || 'v1.3.13' }} https://github.com/aseprite/aseprite.git aseprite
 
       - name: Build Aseprite
         run: |
