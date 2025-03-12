@@ -6,7 +6,7 @@ on:
       version:
         description: 'Aseprite Version'
         required: true
-        default: 'latest'
+        default: 'v1.3.13'  # 默认使用稳定版本
         type: string
 
 jobs:
@@ -14,7 +14,7 @@ jobs:
     name: Build Aseprite (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false  # 让失败的任务不会影响其他任务
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
 
@@ -43,18 +43,18 @@ jobs:
       - name: Download Aseprite Skia (Linux/macOS)
         if: runner.os != 'Windows'
         run: |
-          curl -L -o skia.zip https://github.com/aseprite/skia/releases/download/m97-2/skia-m97-2-linux.zip
+          curl -L -o skia.zip https://github.com/aseprite/skia/releases/latest/download/skia-linux.zip
           unzip skia.zip -d skia
 
       - name: Download Aseprite Skia (Windows)
         if: runner.os == 'Windows'
         run: |
-          curl -L -o skia.zip https://github.com/aseprite/skia/releases/download/m97-2/skia-m97-2-win.zip
+          curl -L -o skia.zip https://github.com/aseprite/skia/releases/latest/download/skia-windows.zip
           powershell -command "Expand-Archive -Path skia.zip -DestinationPath skia"
 
       - name: Clone Aseprite
         run: |
-          git clone --depth=1 --branch ${{ github.event.inputs.version }} https://github.com/aseprite/aseprite.git aseprite
+          git clone --depth=1 --branch ${{ github.event.inputs.version || 'v1.3.5' }} https://github.com/aseprite/aseprite.git aseprite
 
       - name: Build Aseprite
         run: |
