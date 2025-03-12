@@ -6,7 +6,7 @@ on:
       version:
         description: 'Aseprite Version'
         required: true
-        default: 'v1.3.13'  # 默认使用已知稳定版本
+        default: 'v1.3.13'
         type: string
 
 jobs:
@@ -41,22 +41,34 @@ jobs:
         run: |
           choco install -y cmake ninja git curl
 
-      - name: Download Aseprite Skia (Linux)
+      - name: Get Latest Skia URL (Linux)
         if: runner.os == 'Linux'
         run: |
-          curl -L -o skia.zip https://github.com/aseprite/skia/releases/download/m102/Skia-Linux-Release-x64-libstdc++.zip
+          SKIA_URL=$(curl -s https://api.github.com/repos/aseprite/skia/releases/latest | \
+                     grep "browser_download_url.*Skia-Linux-Release-x64-libc++.zip" | \
+                     cut -d '"' -f 4)
+          echo "Skia Download URL: $SKIA_URL"
+          curl -L -o skia.zip "$SKIA_URL"
           unzip skia.zip -d skia
 
-      - name: Download Aseprite Skia (macOS)
+      - name: Get Latest Skia URL (macOS)
         if: runner.os == 'macOS'
         run: |
-          curl -L -o skia.zip https://github.com/aseprite/skia/releases/download/m102/Skia-macOS-Release-x64.zip
+          SKIA_URL=$(curl -s https://api.github.com/repos/aseprite/skia/releases/latest | \
+                     grep "browser_download_url.*Skia-macOS-Release-x64.zip" | \
+                     cut -d '"' -f 4)
+          echo "Skia Download URL: $SKIA_URL"
+          curl -L -o skia.zip "$SKIA_URL"
           unzip skia.zip -d skia
 
-      - name: Download Aseprite Skia (Windows)
+      - name: Get Latest Skia URL (Windows)
         if: runner.os == 'Windows'
         run: |
-          curl -L -o skia.zip https://github.com/aseprite/skia/releases/download/m102/Skia-Windows-Release-x64.zip
+          $skia_url = (Invoke-RestMethod -Uri "https://api.github.com/repos/aseprite/skia/releases/latest" | `
+                      Select-String -Pattern 'browser_download_url.*Skia-Windows-Release-x64.zip' | `
+                      ForEach-Object { $_ -match '"(https://github[^"]+)"'; $matches[1] })
+          Write-Output "Skia Download URL: $skia_url"
+          Invoke-WebRequest -Uri $skia_url -OutFile skia.zip
           powershell -command "Expand-Archive -Path skia.zip -DestinationPath skia"
 
       - name: Clone Aseprite
