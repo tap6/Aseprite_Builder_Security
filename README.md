@@ -31,7 +31,11 @@ Windows：未找到 libcrypto-1_1-x64.dll
 
 <img src="https://github.com/user-attachments/assets/9ce7f97b-0bff-47f7-8f0c-580b2682edae" alt="image" style="zoom: 25%;" />
 
-解压openssl-1.1.1w.zip x64/bin/libcrypto-1_1-x64.dll到与aseprite.exe的同一目录下
+解压openssl-1.1.1w.zip x64/bin/libcrypto-1_1-x64.dll，将其放置到与aseprite.exe的同一目录下
+
+或
+
+您可以直接下载使用仓库里的libcrypto-1_1-x64.dll，将其放置到与aseprite.exe的同一目录下
 
 ![image](https://github.com/user-attachments/assets/f8983630-6fcc-4990-b5dc-e0aecc7ca6c8)
 
