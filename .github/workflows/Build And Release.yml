@@ -1,0 +1,76 @@
+name: Build Aseprite
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Aseprite Version'
+        required: true
+        default: 'latest'
+        type: string
+
+jobs:
+  build:
+    name: Build Aseprite (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt update
+          sudo apt install -y cmake ninja-build g++ clang libc++-dev libc++abi-dev libx11-dev libxcursor-dev libxi-dev libgl1-mesa-dev libfontconfig1-dev curl git
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install cmake ninja llvm fontconfig curl git
+
+      - name: Install dependencies (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          choco install -y cmake ninja git curl
+
+      - name: Clone Skia
+        run: |
+          git clone --depth=1 https://github.com/aseprite/skia.git skia
+          cd skia
+          python ./tools/git-sync-deps
+          mkdir build
+          cd build
+          cmake -G Ninja -DCMAKE_BUILD_TYPE=Release ..
+          ninja
+          cd ../../
+
+      - name: Clone Aseprite
+        run: |
+          git clone --depth=1 --branch ${{ github.event.inputs.version }} https://github.com/aseprite/aseprite.git aseprite
+
+      - name: Build Aseprite
+        run: |
+          cd aseprite
+          mkdir build
+          cd build
+          cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DLAF_BACKEND=skia -DSKIA_DIR=../../skia -DSKIA_LIBRARY_DIR=../../skia/out/Release -DSKIA_LIBRARY=../../skia/out/Release/skia.lib ..
+          ninja
+
+      - name: Archive Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: aseprite-${{ matrix.os }}
+          path: aseprite/build/bin/aseprite*
+
+      - name: Create Release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: aseprite/build/bin/aseprite*
+          tag_name: aseprite-${{ github.event.inputs.version }}
+          name: "Aseprite ${{ github.event.inputs.version }} Release"
+          body: "Compiled version of Aseprite ${{ github.event.inputs.version }} for Windows, Linux, and macOS"
