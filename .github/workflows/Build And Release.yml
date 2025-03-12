@@ -7,36 +7,39 @@ on:
     paths:
       - 'BuildLog.md'
   workflow_dispatch:
+
 env:
   BUILD_TYPE: Release
 
 jobs:
   fetch-aseprite-info:
-    name: Fetch Aseprite Release Info
+    name: Fetch deps info
     runs-on: ubuntu-latest
     outputs:
-      download-link: ${{ steps.aseprite-link.outputs.download-link }}
-      release-tag: ${{ steps.aseprite-link.outputs.release-tag }}
+      download-link: ${{ steps.fetch.outputs.download-link }}
+      release-tag: ${{ steps.fetch.outputs.release-tag }}
     steps:
-      - name: Fetch Aseprite Release Link
-        id: aseprite-link
+      - name: Fetch Aseprite release info
+        id: fetch
         run: |
-          echo "Fetching Aseprite latest release..."
+          echo "Fetching Aseprite release info..."
           RELEASE_API="https://api.github.com/repos/aseprite/aseprite/releases/latest"
-          RESPONSE=$(curl -s $RELEASE_API)
-          RELEASE_TAG=$(echo "$RESPONSE" | jq -r '.tag_name')
-          DOWNLOAD_LINK=$(echo "$RESPONSE" | jq -r '.assets[] | select(.name | test("Aseprite-.*?-Source.zip")) | .browser_download_url')
-
-          if [[ -z "$RELEASE_TAG" || -z "$DOWNLOAD_LINK" ]]; then
-            echo "Error: Failed to fetch release details!"
-            exit 1
-          fi
-
-          echo "Release Tag: $RELEASE_TAG"
-          echo "Download Link: $DOWNLOAD_LINK"
-
-          echo "release-tag=$RELEASE_TAG" >> $GITHUB_ENV
-          echo "download-link=$DOWNLOAD_LINK" >> $GITHUB_ENV
+          MATCH_REGEX="Aseprite-.*?-Source.zip"
+          for i in {1..10}; do
+            RESPONSE=$(curl -s "$RELEASE_API")
+            RELEASE_TAG=$(echo "$RESPONSE" | jq -r '.tag_name')
+            DOWNLOAD_LINK=$(echo "$RESPONSE" | jq -r --arg re "$MATCH_REGEX" '.assets[] | select(.name | test($re)) | .browser_download_url')
+            if [ -n "$DOWNLOAD_LINK" ] && [ "$DOWNLOAD_LINK" != "null" ]; then
+              echo "Found release tag: $RELEASE_TAG"
+              echo "download-link=$DOWNLOAD_LINK" >> $GITHUB_OUTPUT
+              echo "release-tag=$RELEASE_TAG" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+            echo "Release not found, retrying in 10 seconds..."
+            sleep 10
+          done
+          echo "Failed to fetch release info" >&2
+          exit 1
 
   create-release:
     name: Create Release
@@ -49,7 +52,8 @@ jobs:
       release-tag: ${{ needs.fetch-aseprite-info.outputs.release-tag }}
     steps:
       - uses: actions/checkout@v2
-      - uses: ncipollo/release-action@v1
+      - name: Create Release on GitHub
+        uses: ncipollo/release-action@v1
         with:
           tag: ${{ needs.fetch-aseprite-info.outputs.release-tag }}
           body: Aseprite-${{ needs.fetch-aseprite-info.outputs.release-tag }}
@@ -63,11 +67,11 @@ jobs:
       contents: write
     runs-on: ${{ matrix.os }}
     strategy:
-        matrix:
-          os: [windows-latest, ubuntu-latest, macos-latest]
-        fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+      fail-fast: false
     steps:
-      - name: Install Dependencies (Linux)
+      - name: Install Dependencies
         if: runner.os == 'Linux'
         shell: bash
         run: |
@@ -75,34 +79,29 @@ jobs:
           sudo apt-get install -y \
             libpixman-1-dev libfreetype6-dev libharfbuzz-dev zlib1g-dev \
             libx11-dev libxcursor-dev libxi-dev libgl1-mesa-dev libfontconfig1-dev
-
       - uses: actions/checkout@v4
-
-      - name: Clone Aseprite
+      - name: Install Aseprite
+        shell: bash
         run: |
-          git clone --recursive -j8 https://github.com/aseprite/aseprite.git --branch ${{ needs.create-release.outputs.release-tag }}
-
+          git clone --recurse-submodules -j8 https://github.com/aseprite/aseprite.git --branch ${{ needs.create-release.outputs.release-tag }}
       - name: Install Skia
         working-directory: aseprite
+        shell: bash
         run: |
           if [[ "${{ runner.os }}" == "Windows" ]] ; then
             choco install wget -y --no-progress
-            wget https://github.com/aseprite/skia/releases/download/m102-861e4743af/Skia-Windows-Release-x64.zip
+            wget https://github.com/aseprite/skia/releases/download/m124-08a5439a6b/Skia-Windows-Release-x64.zip
             unzip Skia-Windows-Release-x64.zip -d skia
           elif [[ "${{ runner.os }}" == "macOS" ]] ; then
-            wget https://github.com/aseprite/skia/releases/download/m102-861e4743af/Skia-macOS-Release-arm64.zip
+            wget https://github.com/aseprite/skia/releases/download/m124-08a5439a6b/Skia-macOS-Release-arm64.zip
             unzip Skia-macOS-Release-arm64.zip -d skia
           else
-            wget https://github.com/aseprite/skia/releases/download/m102-861e4743af/Skia-Linux-Release-x64-libc++.zip
-            unzip Skia-Linux-Release-x64-libc++.zip -d skia
+            wget https://github.com/aseprite/skia/releases/download/m124-08a5439a6b/Skia-Linux-Release-x64.zip
+            unzip Skia-Linux-Release-x64.zip -d skia
           fi
-
-      - name: Install Ninja
-        uses: aseprite/get-ninja@main
-
+      - uses: aseprite/get-ninja@main
       - uses: ilammy/msvc-dev-cmd@v1
         if: runner.os == 'Windows'
-
       - name: Generating Makefiles
         shell: bash
         working-directory: aseprite
@@ -121,31 +120,26 @@ jobs:
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
             -DCMAKE_OSX_DEPLOYMENT_TARGET=10.9 \
             -DENABLE_TESTS=OFF \
-            -ENABLE_SCRIPTING=$enable_scripting \
-            -ENABLE_CCACHE=$enable_ccache \
+            -DENABLE_SCRIPTING=$enable_scripting \
+            -DENABLE_CCACHE=$enable_ccache \
             -DLAF_BACKEND=$laf_backend \
             -DSKIA_DIR=$(realpath skia) \
             -DSKIA_LIBRARY_DIR=$(realpath skia/out/Release-$skia_arch)
-
       - name: Compiling
         shell: bash
         working-directory: aseprite
         run: |
           cd build && ninja
-
-      - name: Clean Up Build Folder
+      - name: Clean Up Build folder
         working-directory: aseprite/build/bin
         shell: bash
         run: find . -mindepth 1 ! \( -name 'aseprite' -o -name 'aseprite.exe' -o -name 'data' -prune \) -exec rm -rf {} +
-
-      - name: Make Portable Zip
+      - name: Make portable zip
         working-directory: aseprite/build/bin
         run: echo '# This file is here so Aseprite behaves as a portable program' > aseprite.ini
-
-      - name: Create release
+      - name: Create release archive
         working-directory: aseprite/build/bin
         run: 7z -tzip a Aseprite-${{ needs.create-release.outputs.release-tag }}-${{ runner.os }}.zip *
-
       - name: Upload release
         uses: svenstaro/upload-release-action@v2
         with:
