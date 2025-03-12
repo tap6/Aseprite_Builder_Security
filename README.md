@@ -38,7 +38,3 @@ Windows：未找到 libcrypto-1_1-x64.dll
 ![image](https://github.com/user-attachments/assets/f8983630-6fcc-4990-b5dc-e0aecc7ca6c8)
 
 现在 aseprite 应该可以正常工作了。
-
-
-
-
