@@ -6,7 +6,7 @@ on:
       version:
         description: 'Aseprite Version'
         required: true
-        default: 'v1.3.13'  # 默认使用 v1.3.13
+        default: 'v1.3.13'
         type: string
 
 jobs:
@@ -46,35 +46,15 @@ jobs:
         run: |
           SKIA_URL=$(curl -s https://api.github.com/repos/aseprite/skia/releases/latest | \
                      jq -r '.assets[] | select(.name | contains("Skia-Linux-Release-x64-libc++")) | .browser_download_url')
-          if [ -z "$SKIA_URL" ]; then echo "Error: Skia URL not found!"; exit 1; fi
-          echo "Skia Download URL: $SKIA_URL"
+          if [ -z "$SKIA_URL" ] || [ "$SKIA_URL" = "null" ]; then echo "Error: Skia URL not found!"; exit 1; fi
           curl -L -o skia.zip "$SKIA_URL"
           unzip skia.zip -d skia
-
-      - name: Get Latest Skia URL (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          SKIA_URL=$(curl -s https://api.github.com/repos/aseprite/skia/releases/latest | \
-                     jq -r '.assets[] | select(.name | contains("Skia-macOS-Release-x64")) | .browser_download_url')
-          if [ -z "$SKIA_URL" ]; then echo "Error: Skia URL not found!"; exit 1; fi
-          echo "Skia Download URL: $SKIA_URL"
-          curl -L -o skia.zip "$SKIA_URL"
-          unzip skia.zip -d skia
-
-      - name: Get Latest Skia URL (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          $skia_url = (Invoke-RestMethod -Uri "https://api.github.com/repos/aseprite/skia/releases/latest").assets |
-                      Where-Object { $_.name -like "Skia-Windows-Release-x64*" } |
-                      Select-Object -ExpandProperty browser_download_url
-          if (-not $skia_url) { Write-Error "Error: Skia URL not found!"; exit 1 }
-          Write-Output "Skia Download URL: $skia_url"
-          Invoke-WebRequest -Uri $skia_url -OutFile skia.zip
-          powershell -command "Expand-Archive -Path skia.zip -DestinationPath skia"
+          if [ ! -f "skia/libskia.a" ]; then echo "Error: libskia.a not found!"; exit 1; fi
 
       - name: Clone Aseprite (with submodules)
         run: |
           git clone --recursive --depth=1 --branch ${{ github.event.inputs.version || 'v1.3.13' }} https://github.com/aseprite/aseprite.git aseprite
+          if [ ! -f "aseprite/CMakeLists.txt" ]; then echo "Error: CMakeLists.txt not found!"; exit 1; fi
 
       - name: Build Aseprite
         run: |
